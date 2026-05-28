@@ -6,9 +6,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 TODO for contributors (help wanted):
   - Implement GET /analytics/compliance-timeline?system_id={id}&days=30
     Return the last N daily ComplianceSnapshot rows for one AI system.
-  - Implement GET /analytics/summary — return overall stats:
-    total systems, average compliance score, count by risk level,
-    count by compliance status.
   - Acceptance criteria: after the daily snapshot scheduler runs (see
     backend/app/tasks/scheduler.py), the timeline endpoint returns at
     least one data point per system.
@@ -16,12 +13,12 @@ TODO for contributors (help wanted):
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 from app.core.database import get_db
 from app.core.security import get_current_user
 from app.models.user import User
-from app.schemas.analytics import ComplianceTimelineResponse
 from app.models.ai_system import AISystem
-from sqlalchemy import func
+from app.schemas.analytics import ComplianceTimelineResponse
 
 router = APIRouter()
 
@@ -64,30 +61,30 @@ def get_analytics_summary(
     Returns:
         Aggregate compliance statistics for the user's AI systems.
     """
-    # Aggregate risk level counts
-    risk_counts = db.query(
-        AISystem.risk_level, 
-        func.count(AISystem.id)
-    ).filter(
-        AISystem.owner_id == current_user.id
-    ).group_by(
-        AISystem.risk_level
-    ).all()
-    
+    risk_counts = (
+        db.query(AISystem.risk_level, func.count(AISystem.id))
+        .filter(AISystem.owner_id == current_user.id)
+        .group_by(AISystem.risk_level)
+        .all()
+    )
+
     counts = {
         "minimal": 0,
         "limited": 0,
         "high": 0,
-        "unacceptable": 0
+        "unacceptable": 0,
     }
-    
+
     total_systems = 0
     for risk_level, count in risk_counts:
         total_systems += count
-        if risk_level and risk_level.value in counts:
-            counts[risk_level.value] = count
+        if risk_level is None:
+            continue
+        key = risk_level.value if hasattr(risk_level, "value") else str(risk_level)
+        if key in counts:
+            counts[key] = int(count)
 
     return {
         "total_systems": total_systems,
-        "counts": counts
+        "counts": counts,
     }
