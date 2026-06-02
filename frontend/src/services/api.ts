@@ -147,6 +147,14 @@ export const authApi = {
     })
     return data
   },
+  updateMe: async (payload: {
+  full_name?: string
+  company_name?: string
+  onboarding_completed?: boolean
+}) => {
+  const { data } = await api.patch('/users/me', payload)
+  return data
+},
 }
 
 // AI Systems API
